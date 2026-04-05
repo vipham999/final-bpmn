@@ -1,0 +1,7 @@
+streamlit
+altair
+pandas
+networkx
+scikit-learn
+numpy
+karateclub
