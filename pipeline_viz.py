@@ -145,6 +145,7 @@ def figure_cosine_heatmap(
     case_ids: list[str],
     clusters: np.ndarray | None = None,
     max_cases: int = 100,
+    cosine_dampen: float = 1.0,
 ) -> tuple[go.Figure, str | None]:
     """Trả về (figure, cảnh báo nếu đã cắt bớt case)."""
     n = len(case_ids)
@@ -165,6 +166,10 @@ def figure_cosine_heatmap(
         emb = np.asarray(embeddings, dtype=float)
 
     sim = cosine_similarity(emb)
+    if cosine_dampen < 1.0:
+        sim = sim.astype(float) * float(cosine_dampen)
+        np.fill_diagonal(sim, 1.0)
+        sim = np.clip(sim, -1.0, 1.0)
     case_ids_str = [str(c) for c in case_ids]
 
     if clusters is not None and len(clusters) == len(case_ids_str):

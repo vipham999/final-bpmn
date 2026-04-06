@@ -161,7 +161,7 @@ PROCESSES: list[dict[str, str]] = [
     },
 ]
 
-REPLICAS_PER_PROCESS = 5  # số case / quy trình (tăng để cụm tương đồng rõ hơn)
+REPLICAS_PER_PROCESS = 5  # số case / quy trình (tăng mạnh để kết quả cosine ổn định hơn)
 
 
 def write_catalog() -> None:

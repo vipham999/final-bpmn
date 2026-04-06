@@ -2,7 +2,6 @@ import io
 import json
 from html import escape
 from pathlib import Path
-from typing import Any
 
 import altair as alt
 import numpy as np
@@ -76,52 +75,20 @@ def _render_linear_bpmn_svg(activity_sequence: list[str], title: str) -> str:
     return "".join(parts)
 
 
-def _demo_reference_process() -> dict[str, Any]:
-    demo_df = pd.read_csv(demo_csv_path())
-    required = {"case_id", "activity", "timestamp"}
-    if not required.issubset(demo_df.columns):
-        raise ValueError("`data/event_log_demo.csv` thiếu cột bắt buộc: case_id, activity, timestamp.")
-    trace = (
-        demo_df.sort_values(["case_id", "timestamp"])
-        .groupby("case_id", as_index=False)["activity"]
-        .agg(list)
-        .iloc[0]["activity"]
+def _diagram_process_options() -> pd.DataFrame:
+    cat_df = pd.read_csv(bank_process_catalog_path()).copy()
+    cat_df["activity_sequence_list"] = (
+        cat_df["activity_sequence"].astype(str).str.split("|").apply(lambda s: [x.strip() for x in s if x.strip()])
     )
-    return {
-        "process_id": "LO_STD",
-        "process_code": "LO_STANDARD",
-        "name_vn": "Loan Origination (happy path)",
-        "activity_sequence_list": trace,
-    }
-
-
-def _diagram_process_options(dataset_key: str) -> pd.DataFrame:
-    if dataset_key == "bank20":
-        cat_df = pd.read_csv(bank_process_catalog_path()).copy()
-        cat_df["activity_sequence_list"] = (
-            cat_df["activity_sequence"].astype(str).str.split("|").apply(lambda s: [x.strip() for x in s if x.strip()])
-        )
-        return cat_df
-    demo_row = _demo_reference_process()
-    return pd.DataFrame([demo_row])
+    return cat_df
 
 
 def render_diagrams_web_tab() -> None:
     """Tab sơ đồ: render BPMN động theo dataset/process_id, kèm Petri net mẫu."""
     st.subheader("BPMN 2.0 — render động theo quy trình")
-    dataset_key = st.radio(
-        "Dataset để vẽ BPMN",
-        options=["lo", "bank20"],
-        format_func=lambda x: {
-            "lo": "Loan Origination demo — `data/event_log_demo.csv`",
-            "bank20": "Ngân hàng 20 quy trình — `data/bank20_process_catalog.csv`",
-        }[x],
-        horizontal=True,
-        index=1,
-        key="diagram_data_source",
-    )
+    st.caption("Nguồn BPMN động: `data/bank20_process_catalog.csv`.")
     try:
-        options_df = _diagram_process_options(dataset_key)
+        options_df = _diagram_process_options()
     except FileNotFoundError as exc:
         st.warning(f"Không tìm thấy dữ liệu để vẽ BPMN: {exc}")
         return
@@ -213,7 +180,6 @@ from event_log_pipeline import (
     dataframe_from_pipeline,
     bank20_csv_path,
     bank_process_catalog_path,
-    demo_csv_path,
     embedding_artifact_paths,
     graph_embeddings_csv_bytes,
     graph_embeddings_from_pipeline_result,
@@ -224,7 +190,7 @@ from event_log_pipeline import (
 )
 
 def render_event_log_thesis_tab() -> None:
-    st.subheader("Loan Origination (LO) — Event log → đồ thị → Graph2Vec → K-Means")
+    st.subheader("Bank20 — Event log → đồ thị → Graph2Vec → K-Means")
     _art = embedding_artifact_paths()
     if _art["csv"].is_file():
         with st.expander(
@@ -252,11 +218,11 @@ def render_event_log_thesis_tab() -> None:
 
     st.markdown(
         """
-**Kịch bản demo:** chọn **Loan Origination** (36 hồ sơ) hoặc **20 hoạt động ngân hàng** (nhiều hồ sơ/case, nhiều biến thể / trùng cấu trúc). Mỗi `case_id` là một quy trình; `activity` là bước nghiệp vụ.
+**Kịch bản demo:** dùng bộ **20 quy trình ngân hàng** (nhiều hồ sơ/case, nhiều biến thể / trùng cấu trúc). Mỗi `case_id` là một hồ sơ; `activity` là bước nghiệp vụ.
 
 1. **Trích đồ thị**: với mỗi `case_id`, sắp xếp theo `timestamp`, nối cạnh giữa activity liền kề (succession trực tiếp).
 2. **Model 1 – Graph2Vec**: `fit` trên đồ thị của từng hồ sơ → vector embedding (graph embedding).
-3. **Model 2 – K-Means**: phân cụm các vector → gom **biến thể LO** có cấu trúc tương đồng.
+3. **Model 2 – K-Means**: phân cụm các vector → gom các **biến thể quy trình** có cấu trúc tương đồng.
 4. **Lọc trùng lặp (tùy chọn sau khi huấn luyện)**: **cosine similarity** giữa vector của một hồ sơ truy vấn và toàn kho; ngưỡng (ví dụ ≥ 90%) để cảnh báo **cấu trúc quy trình gần trùng**.
 """
     )
@@ -264,7 +230,7 @@ def render_event_log_thesis_tab() -> None:
         st.markdown(
             """
 - **Cột “Cụm” (cluster)**: máy gom các **hồ sơ (case)** có **cách đi quy trình giống nhau** vào một nhóm. Cùng cụm ≠ cùng đúng/sai nghiệp vụ, mà là **cùng kiểu luồng**.
-- **Chuỗi thao tác**: đúng thứ tự **activity** trong hồ sơ vay — dễ hiểu nhất; “gợi ý” là mô tả nhanh theo bước LO (KYC, CreditScoring, CollateralCheck…).
+- **Chuỗi thao tác**: đúng thứ tự **activity** trong từng hồ sơ — dễ hiểu nhất; “gợi ý” là mô tả nhanh theo luồng nghiệp vụ.
 - **Silhouette** (nếu có): đo độ “tách bạch” giữa các cụm (càng gần **1** thường càng rõ ràng). Chỉ mang tính **tham khảo**, không phải kết luận cuối.
 - **Node/edge đồ thị**: dùng nội bộ để so khớp cấu trúc; có thể xem trong phần kỹ thuật.
 """
@@ -272,24 +238,19 @@ def render_event_log_thesis_tab() -> None:
 
     demo_mode = st.radio(
         "Nguồn dữ liệu",
-        options=["lo", "bank20", "upload"],
+        options=["bank20", "upload"],
         format_func=lambda x: {
-            "lo": "Loan Origination — `data/event_log_demo.csv` (36 hồ sơ)",
             "bank20": "Ngân hàng — **20 quy trình** — `event_log_bank20.csv` + `bank20_process_catalog.csv`",
             "upload": "Upload CSV (case_id, activity, timestamp)",
         }[x],
-        index=1,
+        index=0,
         horizontal=True,
         key="demo_data_source",
     )
-    if demo_mode == "lo":
+    if demo_mode == "bank20":
         st.caption(
-            "LO: đa số **chuẩn** (LoanApplication → … → Disbursement); **C026–C036** là biến thể hiếm."
-        )
-    elif demo_mode == "bank20":
-        st.caption(
-            "Mỗi **quy trình** (P01…P20) có một **chuỗi activity** cố định trong catalog; mỗi quy trình chạy **2 case** "
-            "(P01-C01, P01-C02, …). Event log có thêm cột **`process_id`**. "
+            "Mỗi **quy trình** (P01…P20) có một **chuỗi activity** cố định trong catalog; event log có thêm cột "
+            "**`process_id`** để đối chiếu. "
             "**Trùng quy trình** = hai mã P khác nhau nhưng cùng `activity_sequence` (ví dụ P01↔P14, P03↔P12, P06↔P13). "
             "Activity vocabulary: `data/bank20_activity_catalog.csv`. Sinh lại dữ liệu: `python scripts/generate_bank20_processes.py`."
         )
@@ -373,10 +334,8 @@ def render_event_log_thesis_tab() -> None:
                     st.warning("Hãy upload file CSV.")
                     return
                 df = load_event_log_csv(io.BytesIO(uploaded.read()))
-            elif demo_mode == "bank20":
-                df = load_event_log_csv(bank20_csv_path())
             else:
-                df = load_event_log_csv(demo_csv_path())
+                df = load_event_log_csv(bank20_csv_path())
 
             st.write("**Xem trước log** (10 dòng đầu)")
             st.dataframe(df.head(10), use_container_width=True, hide_index=True)
@@ -403,11 +362,16 @@ def render_event_log_thesis_tab() -> None:
             bang_cum = cluster_variant_summary_table(out_df).rename(
                 columns={
                     "cum_kmeans": "Cụm (K-Means)",
-                    "ma_bien_the_dien_hinh": "Mã biến thể",
+                    "ma_bien_the_dien_hinh": "Mã biến thể (điển hình)",
+                    "chi_tiet_ma_bien_the": "Ý nghĩa / giải thích mã",
                     "ten_bien_the_dien_hinh": "Tên biến thể điển hình",
                     "so_ho_so": SO_HO_SO_LABEL,
-                    "ghi_chu": "Ghi chú",
+                    "ghi_chu": "Ghi chú (trong cụm & bảng chi tiết)",
                 }
+            )
+            st.caption(
+                "**«Bảng chi tiết»** trong ghi chú = mục **Bảng chi tiết: từng hồ sơ — cụm — biến thể…** ngay bên dưới "
+                "(mỗi dòng một hồ sơ: `case_id`, cụm, mã biến thể, chuỗi thao tác…)."
             )
             st.dataframe(bang_cum, use_container_width=True, hide_index=True)
 
@@ -579,6 +543,15 @@ def render_event_log_thesis_tab() -> None:
         st.caption(
             "**Plotly:** PCA embedding, heatmap cosine. **Pyvis:** đồ thị succession tương tác (kéo nút, zoom)."
         )
+        cosine_dampen = st.slider(
+            "Thu nhỏ cosine hiển thị (heatmap + bảng truy vấn)",
+            min_value=0.5,
+            max_value=1.0,
+            value=0.78,
+            step=0.02,
+            key="cosine_dampen",
+            help="Nhân cosine với hệ số này; đường chéo / chính case truy vấn vẫn = 1. Giảm số hiển thị, thứ tự gần giữ nguyên.",
+        )
         cl_v = clusters_for_case_order(case_ids_v, out_v)
 
         c1, c2 = st.columns(2)
@@ -588,7 +561,9 @@ def render_event_log_thesis_tab() -> None:
                 use_container_width=True,
             )
         with c2:
-            hm_fig, hm_warn = figure_cosine_heatmap(emb_v, case_ids_v, cl_v)
+            hm_fig, hm_warn = figure_cosine_heatmap(
+                emb_v, case_ids_v, cl_v, cosine_dampen=float(cosine_dampen)
+            )
             if hm_warn:
                 st.warning(hm_warn)
             st.plotly_chart(hm_fig, use_container_width=True)
@@ -614,8 +589,8 @@ def render_event_log_thesis_tab() -> None:
         st.divider()
         st.subheader("Lọc & tìm kiếm trùng lặp (Graph2Vec + cosine)")
         st.caption(
-            "So khớp **gần** theo vector embedding (cosine). Với log **20 activity**, nên xem thêm expander "
-            "**chuỗi activity y hệt** — Graph2Vec/Doc2Vec không đảm bảo cosine ≈ 1 cho hai case trùng trace."
+            "So khớp **gần** theo vector embedding (cosine; đã áp **hệ số thu nhỏ** ở slider phía trên). "
+            "Nên xem thêm expander **chuỗi activity y hệt** — Graph2Vec không đảm bảo cosine ≈ 1 cho hai case trùng trace."
         )
         res = st.session_state["pl_result"]
         out_df_cached = st.session_state.get("pl_out_df")
@@ -671,7 +646,9 @@ def render_event_log_thesis_tab() -> None:
                     )
 
         try:
-            ranked = rank_similarity_to_query(case_ids, emb, q_case)
+            ranked = rank_similarity_to_query(
+                case_ids, emb, q_case, cosine_dampen=float(cosine_dampen)
+            )
             if out_df_cached is not None and "cluster" in out_df_cached.columns:
                 cmap = out_df_cached[["case_id", "cluster"]].drop_duplicates()
                 ranked = ranked.merge(cmap, on="case_id", how="left")
@@ -711,7 +688,9 @@ def render_event_log_thesis_tab() -> None:
                     step=0.01,
                     key="pair_threshold",
                 )
-                pairs = pairs_exceeding_similarity(case_ids, emb, pair_thr)
+                pairs = pairs_exceeding_similarity(
+                    case_ids, emb, pair_thr, cosine_dampen=float(cosine_dampen)
+                )
                 if pairs.empty:
                     st.write(f"Không có cặp nào đạt cosine ≥ **{pair_thr:.2f}**.")
                 else:
@@ -734,9 +713,9 @@ def render_event_log_thesis_tab() -> None:
 def main() -> None:
     st.set_page_config(page_title="Process Variant Clustering Demo", page_icon="🔎", layout="wide")
 
-    st.title("🔎 Loan Origination — Phát hiện biến thể từ Event Log")
+    st.title("🔎 Bank20 — Phát hiện biến thể từ Event Log")
     st.caption(
-        "Đề tài: Phát hiện và phân cụm biến thể quy trình (LO) từ event log — Graph2Vec + K-Means"
+        "Đề tài: Phát hiện và phân cụm biến thể quy trình ngân hàng từ event log — Graph2Vec + K-Means"
     )
 
     tab_diagrams, tab_pipeline = st.tabs(["📐 Sơ đồ BPMN & Petri net", "🔬 Event log & pipeline"])

@@ -12,10 +12,20 @@ import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 
 
+def dampen_cosine_matrix(mat: np.ndarray, dampen: float) -> np.ndarray:
+    """Nhân toàn bộ ma trận cosine với dampen, rồi gán đường chéo = 1."""
+    if dampen >= 1.0:
+        return mat.astype(float)
+    out = np.asarray(mat, dtype=float) * float(dampen)
+    np.fill_diagonal(out, 1.0)
+    return np.clip(out, -1.0, 1.0)
+
+
 def rank_similarity_to_query(
     case_ids: List[str],
     embeddings: np.ndarray,
     query_case_id: str,
+    cosine_dampen: float = 1.0,
 ) -> pd.DataFrame:
     """
     So sánh embedding của một case (truy vấn) với toàn bộ case trong kho.
@@ -30,6 +40,10 @@ def rank_similarity_to_query(
     qi = case_ids.index(q)
     vec_q = embeddings[qi : qi + 1]
     sims = cosine_similarity(vec_q, embeddings)[0]
+    if cosine_dampen < 1.0:
+        sims = sims.astype(float) * float(cosine_dampen)
+        sims[qi] = 1.0
+        sims = np.clip(sims, -1.0, 1.0)
 
     out = pd.DataFrame(
         {
@@ -47,13 +61,14 @@ def pairs_exceeding_similarity(
     case_ids: List[str],
     embeddings: np.ndarray,
     threshold: float,
+    cosine_dampen: float = 1.0,
 ) -> pd.DataFrame:
     """
     Liệt kê các cặp case khác nhau có cosine similarity >= threshold (ma trận đối xứng, chỉ nửa trên).
     """
     if len(case_ids) < 2:
         return pd.DataFrame(columns=["case_a", "case_b", "cosine_similarity", "tuong_dong_pct"])
-    mat = cosine_similarity(embeddings)
+    mat = dampen_cosine_matrix(cosine_similarity(embeddings), cosine_dampen)
     rows: List[Dict[str, Any]] = []
     n = len(case_ids)
     for i in range(n):

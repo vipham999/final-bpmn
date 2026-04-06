@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -325,13 +326,59 @@ def _norm_trace(s: str) -> str:
     return s.replace(" ", "")
 
 
-def variant_name_from_trace(trace: str) -> Tuple[str, str]:
+def _bank20_catalog_meta() -> Dict[str, Dict[str, str]]:
+    """Map process_id -> metadata from bank20 catalog (if available)."""
+    p = bank_process_catalog_path()
+    if not p.is_file():
+        return {}
+    try:
+        cat = pd.read_csv(p)
+    except Exception:
+        return {}
+    need = {"process_id", "process_code", "name_vn", "group_vn"}
+    if not need.issubset(cat.columns):
+        return {}
+    out: Dict[str, Dict[str, str]] = {}
+    for _, r in cat.iterrows():
+        pid = str(r["process_id"]).strip()
+        out[pid] = {
+            "process_code": str(r["process_code"]).strip(),
+            "name_vn": str(r["name_vn"]).strip(),
+            "group_vn": str(r["group_vn"]).strip(),
+        }
+    return out
+
+
+def variant_name_from_trace(
+    trace: str,
+    process_id: Optional[str] = None,
+    bank_meta: Optional[Dict[str, Dict[str, str]]] = None,
+) -> Tuple[str, str]:
     """
     Gan ma va ten bien the (tien Viet) dua tren mau trace.
     Dung cho demo + giai thich cum; khong thay the quy dinh nghiep vu.
     """
     if not trace or trace == TRACE_EMPTY:
         return ("BT-00", "Khong xac dinh")
+
+    # Nhánh riêng cho bộ dữ liệu bank20: mã biến thể theo process_id (BK-xx).
+    # Giúp tránh dồn toàn bộ về BT-99 khi trace không thuộc từ điển mẫu upload/demo.
+    pid = str(process_id).strip() if process_id is not None else ""
+    if pid.startswith("P") and pid[1:].isdigit():
+        idx = int(pid[1:])
+        meta = (bank_meta or {}).get(pid, {})
+        pcode = meta.get("process_code", "")
+        pname = meta.get("name_vn", "")
+        pgroup = meta.get("group_vn", "")
+        code = f"BK-{idx:02d}"
+        title = f"Bank20 — {pid}"
+        if pcode:
+            title += f" ({pcode})"
+        if pname:
+            title += f": {pname}"
+        if pgroup:
+            title += f" [{pgroup}]"
+        return (code, title)
 
     acts = [a.strip() for a in trace.split("→")]
     lower = [a.lower() for a in acts]
@@ -341,7 +388,7 @@ def variant_name_from_trace(trace: str) -> Tuple[str, str]:
         "LoanApplication→KYC→CreditScoring→CreditApproval→Disbursement"
     )
     if compact == lo_chuan:
-        return ("BT-01", "LO chuẩn — đủ 5 bước (nộp hồ sơ → KYC → scoring → phê duyệt → giải ngân)")
+        return ("BT-01", "Tín dụng chuẩn — đủ 5 bước (nộp hồ sơ → KYC → scoring → phê duyệt → giải ngân)")
 
     def kw(key: str) -> bool:
         return any(key in x.replace(" ", "") for x in lower)
@@ -349,28 +396,28 @@ def variant_name_from_trace(trace: str) -> Tuple[str, str]:
     scoring_count = sum(1 for x in lower if "creditscoring" in x.replace(" ", ""))
 
     rules: List[Tuple[bool, Tuple[str, str]]] = [
-        (kw("creditrejection"), ("BT-07", "LO — từ chối cấp tín dụng (CreditRejection)")),
+        (kw("creditrejection"), ("BT-07", "Tín dụng — từ chối cấp tín dụng (CreditRejection)")),
         (
             kw("escalatecase") and not kw("creditscoring"),
-            ("BT-09", "LO lệch — EscalateCase (không qua CreditScoring)"),
+            ("BT-09", "Tín dụng lệch — EscalateCase (không qua CreditScoring)"),
         ),
-        (scoring_count >= 2, ("BT-05", "LO — lặp bước CreditScoring (làm lại / nhập lại)")),
+        (scoring_count >= 2, ("BT-05", "Tín dụng — lặp bước CreditScoring (làm lại / nhập lại)")),
         (
             kw("collateralcheck") and kw("legalreview"),
-            ("BT-08", "LO hiếm — CollateralCheck + LegalReview"),
+            ("BT-08", "Tín dụng hiếm — CollateralCheck + LegalReview"),
         ),
-        (kw("legalreview"), ("BT-06", "LO — có LegalReview (pháp chế / hồ sơ phức tạp)")),
+        (kw("legalreview"), ("BT-06", "Tín dụng — có LegalReview (pháp chế / hồ sơ phức tạp)")),
         (
             kw("collateralcheck") and kw("creditscoring"),
-            ("BT-02", "LO phổ biến — thêm CollateralCheck (có tài sản đảm bảo)"),
+            ("BT-02", "Tín dụng phổ biến — thêm CollateralCheck (có tài sản đảm bảo)"),
         ),
         (
             kw("creditapproval") and not kw("creditscoring"),
-            ("BT-03", "LO — bỏ CreditScoring (nhảy cóc / rút gọn quy trình)"),
+            ("BT-03", "Tín dụng — bỏ CreditScoring (nhảy cóc / rút gọn quy trình)"),
         ),
         (
             len(acts) <= 3 and bool(lower) and lower[-1] == "withdrawnearly",
-            ("BT-04", "LO — dừng sớm sau KYC (WithdrawnEarly)"),
+            ("BT-04", "Tín dụng — dừng sớm sau KYC (WithdrawnEarly)"),
         ),
     ]
     for ok, out in rules:
@@ -399,20 +446,20 @@ def describe_trace_vn(trace: str) -> str:
     has_legal = has_sub("legalreview")
     has_escalate = has_sub("escalatecase")
     if has_reject:
-        return "LO: từ chối cấp tín dụng / đóng hồ sơ — cần đối chiếu quy định tín dụng."
+        return "Gợi ý: từ chối cấp tín dụng / đóng hồ sơ — cần đối chiếu quy định tín dụng."
     if has_escalate and not has_scoring:
-        return "LO lệch: leo cấp xử lý trước khi có scoring — rất ít case, cần rà soát."
+        return "Gợi ý: leo cấp xử lý trước khi có scoring — rất ít case, cần rà soát."
     if has_legal:
-        return "LO: có LegalReview (pháp chế / hồ sơ phức tạp) — luồng thường dài hơn."
+        return "Gợi ý: có LegalReview (pháp chế / hồ sơ phức tạp) — luồng thường dài hơn."
     if scoring_count >= 2:
-        return "LO: lặp CreditScoring (làm lại điểm / bổ sung hồ sơ) — biến thể bất thường."
+        return "Gợi ý: lặp CreditScoring (làm lại điểm / bổ sung hồ sơ) — biến thể bất thường."
     if has_collateral and has_scoring:
-        return f"LO: {n} bước, có thêm CollateralCheck (định giá/kiểm tra TSĐB)."
+        return f"Gợi ý: {n} bước, có thêm CollateralCheck (định giá/kiểm tra TSĐB)."
     if has_approval and not has_scoring:
-        return "LO ngắn: có thể thiếu CreditScoring — kiểm tra có đúng quy trình phê duyệt."
+        return "Gợi ý: quy trình ngắn — có thể thiếu CreditScoring; kiểm tra có đúng quy trình phê duyệt."
     if n <= 3 and norm and norm[-1] == "withdrawnearly":
-        return "LO: khách/hồ sơ dừng sớm sau KYC (không tiếp tục giải ngân)."
-    return f"Luồng LO {n} bước (theo thứ tự sự kiện trong hồ sơ)."
+        return "Gợi ý: khách/hồ sơ dừng sớm sau KYC (không tiếp tục giải ngân)."
+    return f"Luồng nghiệp vụ {n} bước (theo thứ tự sự kiện trong hồ sơ)."
 
 
 def dataframe_from_pipeline(
@@ -423,9 +470,20 @@ def dataframe_from_pipeline(
     rows = []
     traces: Optional[List[str]] = None
     cycle_by_case: Optional[pd.DataFrame] = None
+    process_id_by_case: Dict[str, str] = {}
+    bank_meta: Dict[str, Dict[str, str]] = {}
     if df is not None:
         traces = traces_aligned_with_result(df, result)
         cycle_by_case = case_cycle_metrics(df)
+        if "process_id" in df.columns:
+            first_pid = (
+                df.sort_values("timestamp")
+                .groupby("case_id", sort=False)["process_id"]
+                .first()
+                .astype(str)
+            )
+            process_id_by_case = {str(k): str(v) for k, v in first_pid.to_dict().items()}
+            bank_meta = _bank20_catalog_meta()
     for i, cid in enumerate(result["case_ids"]):
         g = result["graphs"][i]
         so_buoc = g.number_of_nodes()
@@ -450,15 +508,50 @@ def dataframe_from_pipeline(
         if traces:
             row["chuoi_thao_tac"] = traces[i]
             row["goi_y"] = describe_trace_vn(traces[i])
-            code, title = variant_name_from_trace(traces[i])
+            if process_id_by_case:
+                row["process_id"] = process_id_by_case.get(str(cid), "")
+            code, title = variant_name_from_trace(
+                traces[i],
+                process_id=process_id_by_case.get(str(cid), None),
+                bank_meta=bank_meta,
+            )
             row["ma_bien_the"] = code
             row["ten_bien_the"] = title
         rows.append(row)
     return pd.DataFrame(rows)
 
 
+def _giai_thich_ma_bien_the(code: str, title: str) -> str:
+    """
+    Mô tả ngắn ý nghĩa mã hiển thị (BK-xx / BT-xx).
+    BK-kk: ánh xạ process_id Pkk trong event log + catalog bank20.
+    """
+    code = (code or "").strip()
+    title = (title or "").strip()
+    if not code:
+        return ""
+    if code.startswith("BK-"):
+        m = re.search(r"(P\d+)\s*\(([^)]+)\)", title)
+        if m:
+            pid, syscode = m.group(1), m.group(2)
+            return (
+                f"{code} = mã nội bộ gắn với **{pid}** (mã hệ thống `{syscode}` trong "
+                f"`bank20_process_catalog.csv`). Quy ước: **{code} ↔ {pid}** (cùng số thứ tự)."
+            )
+        return (
+            f"{code} = mã nội bộ theo cột **process_id** (P01…P20) trong event log; "
+            "đối chiếu tên quy trình trong catalog Bank20."
+        )
+    if code.startswith("BT-"):
+        return (
+            f"{code} = mã biến thể theo **rule chuỗi activity** (bộ mẫu tín dụng/upload), "
+            "khác hệ BK dùng cho bank20."
+        )
+    return f"Mã `{code}` — xem cột tên biến thể bên cạnh."
+
+
 def cluster_variant_summary_table(out_df: pd.DataFrame) -> pd.DataFrame:
-    """Moi dong = 1 cum K-Means: ten bien the dien hinh + so case."""
+    """Mỗi dòng = 1 cụm K-Means: mã điển hình + giải thích + ghi chú có thể đọc được."""
     rows = []
     for c in sorted(out_df["cluster"].unique()):
         sub = out_df[out_df["cluster"] == c].copy()
@@ -468,8 +561,10 @@ def cluster_variant_summary_table(out_df: pd.DataFrame) -> pd.DataFrame:
                 {
                     "cum_kmeans": int(c),
                     "ma_bien_the_dien_hinh": "",
+                    "chi_tiet_ma_bien_the": "",
                     "ten_bien_the_dien_hinh": "",
                     "so_ho_so": n,
+                    "ghi_chu": "",
                 }
             )
             continue
@@ -477,14 +572,25 @@ def cluster_variant_summary_table(out_df: pd.DataFrame) -> pd.DataFrame:
         mode_code = sub["ma_bien_the"].mode()
         title = str(mode_title.iloc[0]) if len(mode_title) else ""
         code = str(mode_code.iloc[0]) if len(mode_code) else ""
+        chi_tiet = _giai_thich_ma_bien_the(code, title)
         variants_in_cum = sub.groupby(["ma_bien_the", "ten_bien_the"]).size().reset_index(name="n")
-        ghi_chu = ""
+        variants_in_cum = variants_in_cum.sort_values("n", ascending=False)
         if len(variants_in_cum) > 1:
-            ghi_chu = "Trong cum co nhieu loai bien the (xem bang chi tiet)."
+            parts = [f"{r['ma_bien_the']} ({int(r['n'])} hồ sơ)" for _, r in variants_in_cum.iterrows()]
+            ghi_chu = (
+                f"Cụm trộn **{len(variants_in_cum)}** loại biến thể: " + "; ".join(parts) + ". "
+                "Chi tiết từng hồ sơ: bảng **«Bảng chi tiết: từng hồ sơ — cụm — biến thể…»** ngay bên dưới."
+            )
+        else:
+            ghi_chu = (
+                "Cụm đồng nhất một loại biến thể (mọi hồ sơ cùng mã với dòng điển hình). "
+                "Danh sách đầy đủ: bảng **«Bảng chi tiết: từng hồ sơ — cụm — biến thể…»** phía dưới."
+            )
         rows.append(
             {
                 "cum_kmeans": int(c),
                 "ma_bien_the_dien_hinh": code,
+                "chi_tiet_ma_bien_the": chi_tiet,
                 "ten_bien_the_dien_hinh": title,
                 "so_ho_so": n,
                 "ghi_chu": ghi_chu,
