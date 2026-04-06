@@ -1,0 +1,21 @@
+activity,group_vn,description_vn
+CustomerIdentification,Onboarding,Xác minh danh tính (KYC)
+RiskProfileAssessment,Onboarding,Đánh giá mức độ rủi ro khách hàng
+AccountOpening,Onboarding,Khởi tạo / kích hoạt tài khoản
+CardIssuance,Onboarding,Phát hành thẻ (Debit/Credit)
+LoanApplicationProcessing,Lending,Tiếp nhận và xử lý hồ sơ vay
+CreditScoring,Lending,Chấm điểm tín dụng
+CollateralValuation,Lending,Định giá tài sản đảm bảo
+Disbursement,Lending,Giải ngân khoản vay
+DebtCollection,Lending,Theo dõi / thu hồi nợ
+CashDepositWithdrawal,Giao dịch,Nạp hoặc rút tiền mặt
+FundTransfer,Giao dịch,Chuyển tiền nội bộ / liên ngân hàng
+ForeignExchange,Giao dịch,Mua bán ngoại tệ
+LetterOfCreditIssuance,Giao dịch,Phát hành thư tín dụng (LC)
+TransactionMonitoring,Vận hành & tuân thủ,Giám sát giao dịch (gian lận)
+AMLScreening,Vận hành & tuân thủ,Kiểm tra phòng chống rửa tiền (AML)
+Reconciliation,Vận hành & tuân thủ,Đối soát hệ thống / sổ cái
+InternalAudit,Vận hành & tuân thủ,Kiểm toán nội bộ
+CreditApproval,Lending (bổ sung),Phê duyệt tín dụng (bước thường gặp sau scoring)
+PaymentSettlement,Lending & giao dịch (bổ sung),Quyết toán / thanh toán sau giao dịch
+CustomerNotification,Onboarding & dịch vụ (bổ sung),Thông báo cho khách hàng

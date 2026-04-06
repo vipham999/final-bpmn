@@ -18,3 +18,7 @@ env/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Graph embedding artifacts (tạo lại bằng Huấn luyện trong app)
+outputs/*
+!outputs/.gitkeep

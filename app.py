@@ -1,9 +1,14 @@
 import io
+import json
+from html import escape
 from pathlib import Path
+from typing import Any
 
 import altair as alt
+import numpy as np
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 SO_HO_SO_LABEL = "Số hồ sơ"
 _ROOT = Path(__file__).resolve().parent
@@ -11,17 +16,146 @@ _DIAGRAM_BPMN = _ROOT / "docs" / "diagrams" / "bpmn_lo_standard.svg"
 _DIAGRAM_PN = _ROOT / "docs" / "diagrams" / "petrinet_lo_standard.svg"
 
 
-def render_diagrams_web_tab() -> None:
-    """Hiển thị BPMN & Petri net (SVG) trên web — cùng nội dung file trong docs/diagrams/."""
-    st.subheader("BPMN 2.0 — Loan Origination (happy path)")
-    st.caption(
-        "Start → LoanApplication → KYC → CreditScoring → CreditApproval → Disbursement → End. "
-        "Khớp trace chuẩn trong `data/event_log_demo.csv`."
+def _render_linear_bpmn_svg(activity_sequence: list[str], title: str) -> str:
+    """Render BPMN happy-path SVG from a linear activity sequence."""
+    n = len(activity_sequence)
+    box_w = 132
+    box_h = 54
+    gap = 26
+    margin_x = 26
+    start_r = 14
+    top_y = 92
+    content_w = margin_x * 2 + 80 + (n * box_w) + ((n + 1) * gap) + 80
+    width = max(920, content_w)
+    height = 240
+
+    x = margin_x + start_r
+    start_cx = x
+    start_cy = top_y + box_h // 2
+    x += start_r + gap
+
+    parts: list[str] = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="100%" height="{height}" role="img" aria-label="{escape(title)}">',
+        "<defs>",
+        '<marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">',
+        '<path d="M 0 0 L 10 5 L 0 10 z" fill="#222"/>',
+        "</marker>",
+        "</defs>",
+        '<rect x="0" y="0" width="100%" height="100%" fill="#f9f9f9"/>',
+        f'<text x="{width/2:.1f}" y="30" text-anchor="middle" font-size="22" font-weight="600" fill="#222">{escape(title)}</text>',
+        f'<circle cx="{start_cx}" cy="{start_cy}" r="{start_r}" fill="white" stroke="#222" stroke-width="3"/>',
+        f'<line x1="{start_cx + start_r}" y1="{start_cy}" x2="{x - 8}" y2="{start_cy}" stroke="#222" stroke-width="2.5" marker-end="url(#arrow)"/>',
+    ]
+
+    for idx, act in enumerate(activity_sequence):
+        rx = x
+        ry = top_y
+        parts.append(
+            f'<rect x="{rx}" y="{ry}" width="{box_w}" height="{box_h}" rx="8" fill="#dbe9f2" stroke="#2f81c1" stroke-width="2"/>'
+        )
+        parts.append(
+            f'<text x="{rx + box_w/2:.1f}" y="{ry + 33}" text-anchor="middle" font-size="13" fill="#1f2937">{escape(act)}</text>'
+        )
+        x = rx + box_w + gap
+        if idx < n - 1:
+            parts.append(
+                f'<line x1="{rx + box_w}" y1="{start_cy}" x2="{x - 8}" y2="{start_cy}" stroke="#222" stroke-width="2.5" marker-end="url(#arrow)"/>'
+            )
+
+    end_cx = x + start_r
+    parts.append(
+        f'<line x1="{x - gap}" y1="{start_cy}" x2="{end_cx - start_r - 8}" y2="{start_cy}" stroke="#222" stroke-width="2.5" marker-end="url(#arrow)"/>'
     )
-    if _DIAGRAM_BPMN.is_file():
-        st.image(str(_DIAGRAM_BPMN), width="stretch")
-    else:
-        st.warning(f"Không tìm thấy file: {_DIAGRAM_BPMN}")
+    parts.append(f'<circle cx="{end_cx}" cy="{start_cy}" r="{start_r}" fill="white" stroke="#222" stroke-width="3"/>')
+    parts.append(
+        f'<circle cx="{end_cx}" cy="{start_cy}" r="{start_r - 5}" fill="none" stroke="#222" stroke-width="2"/>'
+    )
+    parts.append(f'<text x="{start_cx - 4}" y="{height - 22}" font-size="14" fill="#444">Start</text>')
+    parts.append(f'<text x="{end_cx - 12}" y="{height - 22}" font-size="14" fill="#444">End</text>')
+    parts.append("</svg>")
+    return "".join(parts)
+
+
+def _demo_reference_process() -> dict[str, Any]:
+    demo_df = pd.read_csv(demo_csv_path())
+    required = {"case_id", "activity", "timestamp"}
+    if not required.issubset(demo_df.columns):
+        raise ValueError("`data/event_log_demo.csv` thiếu cột bắt buộc: case_id, activity, timestamp.")
+    trace = (
+        demo_df.sort_values(["case_id", "timestamp"])
+        .groupby("case_id", as_index=False)["activity"]
+        .agg(list)
+        .iloc[0]["activity"]
+    )
+    return {
+        "process_id": "LO_STD",
+        "process_code": "LO_STANDARD",
+        "name_vn": "Loan Origination (happy path)",
+        "activity_sequence_list": trace,
+    }
+
+
+def _diagram_process_options(dataset_key: str) -> pd.DataFrame:
+    if dataset_key == "bank20":
+        cat_df = pd.read_csv(bank_process_catalog_path()).copy()
+        cat_df["activity_sequence_list"] = (
+            cat_df["activity_sequence"].astype(str).str.split("|").apply(lambda s: [x.strip() for x in s if x.strip()])
+        )
+        return cat_df
+    demo_row = _demo_reference_process()
+    return pd.DataFrame([demo_row])
+
+
+def render_diagrams_web_tab() -> None:
+    """Tab sơ đồ: render BPMN động theo dataset/process_id, kèm Petri net mẫu."""
+    st.subheader("BPMN 2.0 — render động theo quy trình")
+    dataset_key = st.radio(
+        "Dataset để vẽ BPMN",
+        options=["lo", "bank20"],
+        format_func=lambda x: {
+            "lo": "Loan Origination demo — `data/event_log_demo.csv`",
+            "bank20": "Ngân hàng 20 quy trình — `data/bank20_process_catalog.csv`",
+        }[x],
+        horizontal=True,
+        index=1,
+        key="diagram_data_source",
+    )
+    try:
+        options_df = _diagram_process_options(dataset_key)
+    except FileNotFoundError as exc:
+        st.warning(f"Không tìm thấy dữ liệu để vẽ BPMN: {exc}")
+        return
+    except ValueError as exc:
+        st.warning(str(exc))
+        return
+
+    options_df = options_df.sort_values("process_id").reset_index(drop=True)
+    pick_label = options_df.apply(
+        lambda r: f"{r['process_id']} — {r.get('process_code', '')} — {r.get('name_vn', '')}",
+        axis=1,
+    ).tolist()
+    selected_label = st.selectbox(
+        "Chọn process_id",
+        options=pick_label,
+        index=0,
+        key="diagram_process_id",
+    )
+    selected_idx = pick_label.index(selected_label)
+    selected = options_df.iloc[selected_idx]
+    acts = selected["activity_sequence_list"]
+    if not isinstance(acts, list) or not acts:
+        st.warning("Không có chuỗi activity để vẽ BPMN.")
+        return
+
+    title = f"BPMN 2.0 - {selected['process_id']} ({selected.get('process_code', '')})"
+    st.caption("Start → " + " → ".join(acts) + " → End")
+    components.html(_render_linear_bpmn_svg(acts, title=title), height=260, scrolling=True)
+
+    with st.expander("Sơ đồ BPMN/Petri mẫu cố định (tài liệu gốc)", expanded=False):
+        if _DIAGRAM_BPMN.is_file():
+            st.image(str(_DIAGRAM_BPMN), width="stretch")
+        else:
+            st.warning(f"Không tìm thấy file: {_DIAGRAM_BPMN}")
 
     st.subheader("Petri net — Workflow net (place • → transition ▭ → …)")
     st.caption(
@@ -33,8 +167,8 @@ def render_diagrams_web_tab() -> None:
         st.warning(f"Không tìm thấy file: {_DIAGRAM_PN}")
 
     st.info(
-        "Hai file gốc: `docs/diagrams/bpmn_lo_standard.svg`, `docs/diagrams/petrinet_lo_standard.svg` — "
-        "có thể mở bằng trình duyệt hoặc chèn vào báo cáo."
+        "Bạn có thể xem BPMN động theo từng process ở phía trên; hai file tĩnh gốc vẫn nằm ở "
+        "`docs/diagrams/bpmn_lo_standard.svg`, `docs/diagrams/petrinet_lo_standard.svg`."
     )
 
 
@@ -59,25 +193,71 @@ def cluster_count_bar_chart(counts_sorted: pd.Series) -> None:
     )
     st.altair_chart(chart, use_container_width=True)
 
+from duplicate_search import (
+    duplicate_process_pairs_from_catalog,
+    exact_trace_duplicate_pairs,
+    pairs_exceeding_similarity,
+    process_groups_identical_flow,
+    rank_similarity_to_query,
+)
+from pipeline_viz import (
+    clusters_for_case_order,
+    figure_cosine_heatmap,
+    figure_embedding_pca_scatter,
+    succession_pyvis_html,
+)
 from event_log_pipeline import (
     cluster_cycle_cost_summary,
     cluster_story_markdown,
     cluster_variant_summary_table,
     dataframe_from_pipeline,
+    bank20_csv_path,
+    bank_process_catalog_path,
     demo_csv_path,
+    embedding_artifact_paths,
+    graph_embeddings_csv_bytes,
+    graph_embeddings_from_pipeline_result,
+    graph_embeddings_npz_bytes,
     load_event_log_csv,
     run_pipeline,
+    save_graph_embedding_artifacts,
 )
 
 def render_event_log_thesis_tab() -> None:
     st.subheader("Loan Origination (LO) — Event log → đồ thị → Graph2Vec → K-Means")
+    _art = embedding_artifact_paths()
+    if _art["csv"].is_file():
+        with st.expander(
+            "📂 Graph embedding đã lưu trên đĩa (`outputs/`) — xem lại không cần train",
+            expanded=False,
+        ):
+            st.caption(
+                "Mỗi lần **Huấn luyện** thành công, app ghi đè 3 file trong thư mục `outputs/` của project."
+            )
+            st.code(str(_art["csv"].resolve()), language=None)
+            if _art["meta"].is_file():
+                try:
+                    st.json(json.loads(_art["meta"].read_text(encoding="utf-8")))
+                except Exception:
+                    pass
+            try:
+                st.dataframe(
+                    pd.read_csv(_art["csv"]),
+                    use_container_width=True,
+                    hide_index=True,
+                    height=320,
+                )
+            except Exception as exc:
+                st.warning(f"Không đọc được CSV: {exc}")
+
     st.markdown(
         """
-**Kịch bản demo:** quy trình **giải ngân tín dụng / xét duyệt khoản vay** (Loan Origination). Mỗi `case_id` là một hồ sơ vay; `activity` là các bước xử lý (KYC, scoring, phê duyệt, giải ngân…).
+**Kịch bản demo:** chọn **Loan Origination** (36 hồ sơ) hoặc **20 hoạt động ngân hàng** (nhiều hồ sơ/case, nhiều biến thể / trùng cấu trúc). Mỗi `case_id` là một quy trình; `activity` là bước nghiệp vụ.
 
 1. **Trích đồ thị**: với mỗi `case_id`, sắp xếp theo `timestamp`, nối cạnh giữa activity liền kề (succession trực tiếp).
-2. **Model 1 – Graph2Vec**: `fit` trên đồ thị của từng hồ sơ → vector embedding.
+2. **Model 1 – Graph2Vec**: `fit` trên đồ thị của từng hồ sơ → vector embedding (graph embedding).
 3. **Model 2 – K-Means**: phân cụm các vector → gom **biến thể LO** có cấu trúc tương đồng.
+4. **Lọc trùng lặp (tùy chọn sau khi huấn luyện)**: **cosine similarity** giữa vector của một hồ sơ truy vấn và toàn kho; ngưỡng (ví dụ ≥ 90%) để cảnh báo **cấu trúc quy trình gần trùng**.
 """
     )
     with st.expander("Bạn sẽ đọc kết quả thế nào? (không chỉ là con số)", expanded=False):
@@ -90,14 +270,86 @@ def render_event_log_thesis_tab() -> None:
 """
         )
 
-    use_demo = st.checkbox("Dùng file demo mẫu (data/event_log_demo.csv)", value=True)
-    st.caption(
-        "File demo **Loan Origination**: **36 hồ sơ**. Đa số là **LO chuẩn** "
-        "(LoanApplication → KYC → CreditScoring → CreditApproval → Disbursement); "
-        "**C026–C036** là biến thể hiếm (rút gọn, lặp scoring, pháp chế, từ chối, leo cấp…) để thấy **cụm nhỏ**."
+    demo_mode = st.radio(
+        "Nguồn dữ liệu",
+        options=["lo", "bank20", "upload"],
+        format_func=lambda x: {
+            "lo": "Loan Origination — `data/event_log_demo.csv` (36 hồ sơ)",
+            "bank20": "Ngân hàng — **20 quy trình** — `event_log_bank20.csv` + `bank20_process_catalog.csv`",
+            "upload": "Upload CSV (case_id, activity, timestamp)",
+        }[x],
+        index=1,
+        horizontal=True,
+        key="demo_data_source",
     )
+    if demo_mode == "lo":
+        st.caption(
+            "LO: đa số **chuẩn** (LoanApplication → … → Disbursement); **C026–C036** là biến thể hiếm."
+        )
+    elif demo_mode == "bank20":
+        st.caption(
+            "Mỗi **quy trình** (P01…P20) có một **chuỗi activity** cố định trong catalog; mỗi quy trình chạy **2 case** "
+            "(P01-C01, P01-C02, …). Event log có thêm cột **`process_id`**. "
+            "**Trùng quy trình** = hai mã P khác nhau nhưng cùng `activity_sequence` (ví dụ P01↔P14, P03↔P12, P06↔P13). "
+            "Activity vocabulary: `data/bank20_activity_catalog.csv`. Sinh lại dữ liệu: `python scripts/generate_bank20_processes.py`."
+        )
+        try:
+            cat_df = pd.read_csv(bank_process_catalog_path())
+            with st.expander(
+                "📋 20 quy trình — danh mục & quy trình nào **trùng luồng** với nhau",
+                expanded=True,
+            ):
+                st.dataframe(
+                    cat_df.rename(
+                        columns={
+                            "process_id": "Mã QTR",
+                            "process_code": "Mã hệ thống",
+                            "name_vn": "Tên quy trình",
+                            "group_vn": "Nhóm",
+                            "activity_sequence": "Chuỗi activity (|)",
+                        }
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                    height=360,
+                )
+                grp = process_groups_identical_flow(cat_df)
+                st.markdown("**Nhóm quy trình có luồng giống hệt** (cần hợp nhất tài liệu / BPM nếu trùng).")
+                st.dataframe(
+                    grp.rename(
+                        columns={
+                            "nhom_stt": "Nhóm #",
+                            "process_ids": "Mã quy trình",
+                            "ten_quy_trinh": "Tên (theo mã)",
+                            "so_buoc": "Số bước",
+                            "trace_preview": "Đầu luồng",
+                        }
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+                prs = duplicate_process_pairs_from_catalog(cat_df)
+                st.markdown("**Cặp quy trình trùng** (từng cặp P↔P).")
+                st.dataframe(
+                    prs.rename(
+                        columns={
+                            "process_a": "QTR A",
+                            "process_b": "QTR B",
+                            "name_a": "Tên A",
+                            "name_b": "Tên B",
+                            "so_buoc": "Số bước",
+                            "trace_preview": "Đầu luồng",
+                        }
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+        except FileNotFoundError:
+            st.warning(
+                "Không thấy `data/bank20_process_catalog.csv`. Chạy: `python scripts/generate_bank20_processes.py`"
+            )
     uploaded = None
-    if not use_demo:
+    if demo_mode == "upload":
         uploaded = st.file_uploader("Upload CSV (cột: case_id, activity, timestamp)", type=["csv"])
 
     n_clusters = st.slider("Số cụm K (K-Means)", 2, 8, 3, 1, key="kmeans_k")
@@ -116,13 +368,15 @@ def render_event_log_thesis_tab() -> None:
 
     if st.button("Huấn luyện Graph2Vec + K-Means", type="primary", key="train_pipeline"):
         try:
-            if use_demo:
-                df = load_event_log_csv(demo_csv_path())
-            else:
+            if demo_mode == "upload":
                 if uploaded is None:
-                    st.warning("Hãy upload file CSV hoặc bật dùng file demo.")
+                    st.warning("Hãy upload file CSV.")
                     return
                 df = load_event_log_csv(io.BytesIO(uploaded.read()))
+            elif demo_mode == "bank20":
+                df = load_event_log_csv(bank20_csv_path())
+            else:
+                df = load_event_log_csv(demo_csv_path())
 
             st.write("**Xem trước log** (10 dòng đầu)")
             st.dataframe(df.head(10), use_container_width=True, hide_index=True)
@@ -254,8 +508,227 @@ def render_event_log_thesis_tab() -> None:
                 "Reject…). **Cụm K-Means** gom các embedding gần nhau — đôi khi một cụm chứa nhiều mã BT nếu K nhỏ; "
                 "tăng K hoặc xem bảng “Danh mục biến thể”. Kết luận đúng/sai nghiệp vụ vẫn cần **quy định** của đơn vị."
             )
+
+            st.session_state["pl_result"] = result
+            st.session_state["pl_out_df"] = out_df
+            st.session_state["pl_df"] = df
+            try:
+                save_graph_embedding_artifacts(result)
+                st.info(
+                    "📁 **Đã lưu embedding** vào **`outputs/`**: `graph2vec_graph_embeddings.csv`, "
+                    "`graph2vec_graph_embeddings.npz`, `graph2vec_run_meta.json`. "
+                    "Xem lại trong expander **📂 Graph embedding đã lưu…** ở đầu tab, hoặc mở file trực tiếp."
+                )
+            except OSError as exc_save:
+                st.warning(f"Huấn luyện xong nhưng không ghi được `outputs/`: {exc_save}")
         except Exception as exc:
             st.error(f"Lỗi: {exc}")
+
+    if "pl_result" in st.session_state:
+        st.divider()
+        res_v = st.session_state["pl_result"]
+        out_v = st.session_state.get("pl_out_df")
+        case_ids_v = res_v["case_ids"]
+        emb_v = res_v["embeddings"]
+
+        st.subheader("Graph embedding (Graph2Vec / fallback)")
+        st.caption(
+            f"**Phương pháp:** `{res_v['embedding_mode']}`. "
+            "Sau mỗi lần train, bảng này đồng bộ với file **`outputs/graph2vec_graph_embeddings.csv`** (và `.npz`). "
+            "Trong notebook **GNN**, *graph embedding* là tensor `(1, d)` cho **một** đồ thị; "
+            "ở đây **mỗi hàng** = một case = một đồ thị succession."
+        )
+        n_c, n_d = int(emb_v.shape[0]), int(emb_v.shape[1])
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Số case (đồ thị)", n_c)
+        m2.metric("Số chiều embedding", n_d)
+        m3.metric("Cụm K-Means", res_v["n_clusters"])
+        df_emb = graph_embeddings_from_pipeline_result(res_v)
+        d_csv, d_npz = st.columns(2)
+        with d_csv:
+            st.download_button(
+                "Tải CSV — graph_embeddings.csv",
+                data=graph_embeddings_csv_bytes(df_emb),
+                file_name="graph2vec_graph_embeddings.csv",
+                mime="text/csv",
+                key="dl_emb_csv",
+            )
+        with d_npz:
+            st.download_button(
+                "Tải NPZ — case_ids + embeddings",
+                data=graph_embeddings_npz_bytes(case_ids_v, emb_v),
+                file_name="graph2vec_graph_embeddings.npz",
+                mime="application/octet-stream",
+                key="dl_emb_npz",
+            )
+        st.dataframe(df_emb, use_container_width=True, hide_index=True, height=280)
+        peek = st.selectbox(
+            "Xem vector đầy đủ một hồ sơ (in ra dạng mảng)",
+            options=case_ids_v,
+            key="emb_peek_case",
+        )
+        idx = case_ids_v.index(str(peek))
+        vec = np.asarray(emb_v[idx], dtype=float)
+        st.code(
+            np.array2string(vec, precision=6, separator=", ", max_line_width=100),
+            language=None,
+        )
+
+        st.divider()
+        st.subheader("Trực quan hoá (Plotly, Pyvis)")
+        st.caption(
+            "**Plotly:** PCA embedding, heatmap cosine. **Pyvis:** đồ thị succession tương tác (kéo nút, zoom)."
+        )
+        cl_v = clusters_for_case_order(case_ids_v, out_v)
+
+        c1, c2 = st.columns(2)
+        with c1:
+            st.plotly_chart(
+                figure_embedding_pca_scatter(emb_v, case_ids_v, cl_v),
+                use_container_width=True,
+            )
+        with c2:
+            hm_fig, hm_warn = figure_cosine_heatmap(emb_v, case_ids_v, cl_v)
+            if hm_warn:
+                st.warning(hm_warn)
+            st.plotly_chart(hm_fig, use_container_width=True)
+
+        pl_df_v = st.session_state.get("pl_df")
+        if pl_df_v is not None:
+            g_case = st.selectbox(
+                "Chọn hồ sơ để xem đồ thị succession (activity → activity)",
+                options=case_ids_v,
+                key="viz_succession_case",
+            )
+            st.markdown("**Đồ thị succession — Pyvis** (kéo, zoom)")
+            components.html(
+                succession_pyvis_html(pl_df_v, str(g_case)),
+                height=500,
+                scrolling=True,
+            )
+        else:
+            st.caption(
+                "Chạy lại **Huấn luyện** để lưu log gốc — khi đó có thể vẽ đồ thị succession tương tác."
+            )
+
+        st.divider()
+        st.subheader("Lọc & tìm kiếm trùng lặp (Graph2Vec + cosine)")
+        st.caption(
+            "So khớp **gần** theo vector embedding (cosine). Với log **20 activity**, nên xem thêm expander "
+            "**chuỗi activity y hệt** — Graph2Vec/Doc2Vec không đảm bảo cosine ≈ 1 cho hai case trùng trace."
+        )
+        res = st.session_state["pl_result"]
+        out_df_cached = st.session_state.get("pl_out_df")
+        case_ids = res["case_ids"]
+        emb = res["embeddings"]
+
+        q_case = st.selectbox(
+            "Chọn hồ sơ truy vấn (so với toàn kho)",
+            options=case_ids,
+            key="dup_query_case",
+        )
+        thr = st.slider(
+            "Ngưỡng cảnh báo trùng / gần trùng (cosine)",
+            min_value=0.5,
+            max_value=1.0,
+            value=0.9,
+            step=0.01,
+            help="Các hồ sơ khác có cosine ≥ ngưỡng được coi là gần trùng cấu trúc (minh họa).",
+            key="dup_threshold",
+        )
+
+        pl_dup = st.session_state.get("pl_df")
+        if pl_dup is not None:
+            trace_pairs = exact_trace_duplicate_pairs(pl_dup)
+            with st.expander(
+                "Trùng theo **chuỗi activity** trong event log (từng cặp case)",
+                expanded=False,
+            ):
+                if "process_id" in pl_dup.columns:
+                    st.caption(
+                        "Case **cùng `process_id`** là cùng một quy trình (2 bản thực thi). "
+                        "Case **khác `process_id`** nhưng chuỗi activity giống hệt = **hai quy trình trùng luồng** "
+                        "(khớp bảng cặp P↔P ở expander 20 quy trình)."
+                    )
+                else:
+                    st.caption(
+                        "Cặp case có cùng thứ tự activity. So với Graph2Vec/cosine: embedding không luôn phản ánh trùng tuyệt đối."
+                    )
+                if trace_pairs.empty:
+                    st.write("Không có cặp case nào trùng hoàn toàn chuỗi activity.")
+                else:
+                    st.dataframe(
+                        trace_pairs.rename(
+                            columns={
+                                "case_a": "Hồ sơ A",
+                                "case_b": "Hồ sơ B",
+                                "so_buoc": "Số bước",
+                                "trace_preview": "Đầu trace (xem trước)",
+                            }
+                        ),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+        try:
+            ranked = rank_similarity_to_query(case_ids, emb, q_case)
+            if out_df_cached is not None and "cluster" in out_df_cached.columns:
+                cmap = out_df_cached[["case_id", "cluster"]].drop_duplicates()
+                ranked = ranked.merge(cmap, on="case_id", how="left")
+
+            hien = ranked.rename(
+                columns={
+                    "case_id": "Mã hồ sơ",
+                    "cosine_similarity": "Cosine",
+                    "tuong_dong_pct": "Tương đồng (%)",
+                    "la_chinh_no": "Là chính nó",
+                    "cluster": "Cụm",
+                }
+            )
+            st.dataframe(
+                hien,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            others = ranked[(~ranked["la_chinh_no"]) & (ranked["cosine_similarity"] >= thr)]
+            if others.empty:
+                st.success(
+                    f"Không có hồ sơ nào khác đạt cosine ≥ **{thr:.0%}** so với **{q_case}**."
+                )
+            else:
+                st.warning(
+                    f"Cảnh báo (minh họa): **{len(others)}** hồ sơ có cấu trúc embedding gần **{q_case}** "
+                    f"(cosine ≥ {thr:.0%}): {', '.join(others['case_id'].astype(str).tolist())}"
+                )
+
+            with st.expander("Cặp hồ sơ có độ tương đồng cao (toàn bộ kho)", expanded=False):
+                pair_thr = st.slider(
+                    "Ngưỡng cosine cho cặp",
+                    min_value=0.85,
+                    max_value=1.0,
+                    value=0.95,
+                    step=0.01,
+                    key="pair_threshold",
+                )
+                pairs = pairs_exceeding_similarity(case_ids, emb, pair_thr)
+                if pairs.empty:
+                    st.write(f"Không có cặp nào đạt cosine ≥ **{pair_thr:.2f}**.")
+                else:
+                    st.dataframe(
+                        pairs.rename(
+                            columns={
+                                "case_a": "Hồ sơ A",
+                                "case_b": "Hồ sơ B",
+                                "cosine_similarity": "Cosine",
+                                "tuong_dong_pct": "Tương đồng (%)",
+                            }
+                        ),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+        except Exception as exc:
+            st.error(f"Lỗi khi tính similarity: {exc}")
 
 
 def main() -> None:

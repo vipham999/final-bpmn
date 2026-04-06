@@ -3,8 +3,11 @@ Process Mining + Graph2Vec + K-Means: build graphs from event logs (direct succe
 """
 from __future__ import annotations
 
+import io
+import json
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import networkx as nx
 import numpy as np
@@ -76,7 +79,10 @@ def build_graphs_per_case(df: pd.DataFrame) -> Tuple[List[str], List[nx.Graph]]:
     return case_ids, graphs
 
 
-def embed_graphs(graphs: List[nx.Graph]) -> Tuple[np.ndarray, str]:
+def embed_graphs(
+    graphs: List[nx.Graph],
+    random_state: int = 42,
+) -> Tuple[np.ndarray, str]:
     try:
         from karateclub import Graph2Vec
 
@@ -86,6 +92,7 @@ def embed_graphs(graphs: List[nx.Graph]) -> Tuple[np.ndarray, str]:
             workers=1,
             epochs=100,
             min_count=1,
+            seed=int(random_state),
         )
         model.fit(graphs)
         emb = model.get_embedding()
@@ -124,7 +131,7 @@ def run_pipeline(
     if len(graphs) < 2:
         raise ValueError("Can it nhat 2 case de phan cum.")
 
-    embeddings, embed_mode = embed_graphs(graphs)
+    embeddings, embed_mode = embed_graphs(graphs, random_state=random_state)
     n_clusters = max(2, min(n_clusters, len(graphs) - 1))
 
     kmeans = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=10)
@@ -148,6 +155,114 @@ def run_pipeline(
         "kmeans": kmeans,
         "n_clusters": n_clusters,
         "silhouette": silhouette,
+    }
+
+
+def graph_embeddings_dataframe(
+    case_ids: List[str],
+    embeddings: np.ndarray,
+    clusters: Optional[Sequence[int]] = None,
+) -> pd.DataFrame:
+    """
+    Ma trận embedding dạng bảng: mỗi hàng = một case, các cột dim_0 … dim_{d-1}.
+
+    Tương đương ý nghĩa **graph embedding** trong notebook GNN (một vector cho cả đồ thị),
+    nhưng đề tài dùng **Graph2Vec** thay vì GCN + global_mean_pool.
+    """
+    emb = np.asarray(embeddings, dtype=float)
+    if emb.ndim != 2:
+        raise ValueError("embeddings phai la ma tran 2D (n_case, dim).")
+    n = emb.shape[0]
+    if len(case_ids) != n:
+        raise ValueError("So case_id khong khop so hang embedding.")
+    cols = {f"dim_{j}": emb[:, j] for j in range(emb.shape[1])}
+    df = pd.DataFrame({"case_id": [str(c) for c in case_ids], **cols})
+    if clusters is not None:
+        cl = list(clusters)
+        if len(cl) == n:
+            df.insert(1, "cluster", cl)
+    return df
+
+
+def graph_embeddings_from_pipeline_result(result: Dict[str, Any]) -> pd.DataFrame:
+    """Gói tiện từ dict `run_pipeline` (case_ids, embeddings, clusters)."""
+    return graph_embeddings_dataframe(
+        result["case_ids"],
+        result["embeddings"],
+        clusters=result.get("clusters"),
+    )
+
+
+def graph_embeddings_csv_bytes(df: pd.DataFrame) -> bytes:
+    """CSV UTF-8 BOM — mở tốt trên Excel."""
+    return df.to_csv(index=False).encode("utf-8-sig")
+
+
+def graph_embeddings_npz_bytes(case_ids: List[str], embeddings: np.ndarray) -> bytes:
+    """NPZ nén: `case_ids` (object array), `embeddings` (float64 2D), cùng thứ tự hàng."""
+    buf = io.BytesIO()
+    np.savez_compressed(
+        buf,
+        case_ids=np.asarray(case_ids, dtype=object),
+        embeddings=np.asarray(embeddings, dtype=np.float64),
+    )
+    buf.seek(0)
+    return buf.read()
+
+
+EMBEDDING_ARTIFACT_DIR = Path(__file__).resolve().parent / "outputs"
+_EMB_CSV = "graph2vec_graph_embeddings.csv"
+_EMB_NPZ = "graph2vec_graph_embeddings.npz"
+_EMB_META = "graph2vec_run_meta.json"
+
+
+def embedding_artifact_paths(base_dir: Optional[Path] = None) -> Dict[str, Path]:
+    root = Path(base_dir) if base_dir is not None else EMBEDDING_ARTIFACT_DIR
+    return {
+        "dir": root,
+        "csv": root / _EMB_CSV,
+        "npz": root / _EMB_NPZ,
+        "meta": root / _EMB_META,
+    }
+
+
+def save_graph_embedding_artifacts(
+    result: Dict[str, Any],
+    output_dir: Optional[Path] = None,
+) -> Dict[str, str]:
+    """
+    Ghi đè CSV + NPZ + JSON meta trong thư mục `outputs/` (mặc định cạnh file này).
+    Gọi sau mỗi lần huấn luyện thành công để xem lại bằng Excel / Python / app.
+    """
+    paths = embedding_artifact_paths(output_dir)
+    root = paths["dir"]
+    root.mkdir(parents=True, exist_ok=True)
+
+    df = graph_embeddings_from_pipeline_result(result)
+    paths["csv"].write_bytes(graph_embeddings_csv_bytes(df))
+
+    paths["npz"].write_bytes(
+        graph_embeddings_npz_bytes(result["case_ids"], result["embeddings"])
+    )
+
+    emb = np.asarray(result["embeddings"], dtype=float)
+    meta = {
+        "saved_at": datetime.now(timezone.utc).isoformat(),
+        "embedding_mode": result["embedding_mode"],
+        "n_clusters": int(result["n_clusters"]),
+        "n_cases": len(result["case_ids"]),
+        "embedding_dim": int(emb.shape[1]) if emb.ndim == 2 else 0,
+        "silhouette": result.get("silhouette"),
+        "files": {
+            "csv": _EMB_CSV,
+            "npz": _EMB_NPZ,
+            "meta": _EMB_META,
+        },
+    }
+    paths["meta"].write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    return {k: str(v.resolve()) for k, v in paths.items() if k != "dir"} | {
+        "dir": str(root.resolve())
     }
 
 
@@ -406,3 +521,13 @@ def cluster_story_markdown(
 
 def demo_csv_path() -> Path:
     return Path(__file__).resolve().parent / "data" / "event_log_demo.csv"
+
+
+def bank20_csv_path() -> Path:
+    """Event log: 20 quy trình ngân hàng (mỗi quy trình 2 case), cột process_id."""
+    return Path(__file__).resolve().parent / "data" / "event_log_bank20.csv"
+
+
+def bank_process_catalog_path() -> Path:
+    """Catalog 20 quy trình: process_id, tên, nhóm, activity_sequence (|)."""
+    return Path(__file__).resolve().parent / "data" / "bank20_process_catalog.csv"

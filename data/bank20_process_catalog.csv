@@ -1,0 +1,21 @@
+process_id,process_code,name_vn,group_vn,activity_sequence
+P01,ONB_FULL,Mở khách hàng đầy đủ (KYC → rủi ro → tài khoản → thẻ),Onboarding,CustomerIdentification|RiskProfileAssessment|AccountOpening|CardIssuance
+P02,ONB_FAST,Mở tài khoản nhanh + thông báo,Onboarding,CustomerIdentification|AccountOpening|CustomerNotification
+P03,LEND_COLL,Cho vay có tài sản đảm bảo,Tín dụng,LoanApplicationProcessing|CustomerIdentification|CreditScoring|CreditApproval|CollateralValuation|Disbursement
+P04,LEND_NOCOLL,Cho vay không tài sản đảm bảo,Tín dụng,LoanApplicationProcessing|CustomerIdentification|CreditScoring|CreditApproval|Disbursement
+P05,LC_DISB,Thư tín dụng → định giá → giải ngân,Thương mại,LetterOfCreditIssuance|CustomerIdentification|CollateralValuation|Disbursement
+P06,FX_COMPL,Ngoại tệ + giám sát + AML + đối soát,Giao dịch & tuân thủ,ForeignExchange|TransactionMonitoring|AMLScreening|Reconciliation
+P07,CASH_XFER,Tiền mặt → giám sát → chuyển khoản → đối soát,Giao dịch,CashDepositWithdrawal|TransactionMonitoring|FundTransfer|Reconciliation
+P08,DEBT,Thu nợ + KYC + AML + kiểm toán,Tín dụng,DebtCollection|CustomerIdentification|AMLScreening|InternalAudit
+P09,AUDIT_TRAIL,Giám sát giao dịch → đối soát → kiểm toán nội bộ,Tuân thủ,TransactionMonitoring|Reconciliation|InternalAudit
+P10,PAY_SETTLE,Chuyển tiền → quyết toán → thông báo KH,Giao dịch,FundTransfer|PaymentSettlement|CustomerNotification
+P11,LEND_NOTIFY,Cho vay (không TSĐB) + thông báo sau giải ngân,Tín dụng,LoanApplicationProcessing|CustomerIdentification|CreditScoring|CreditApproval|Disbursement|CustomerNotification
+P12,LEND_COLL_DUP,Cho vay có TSĐB (bản trùng quy trình P03 — ví dụ tài liệu song song),Tín dụng,LoanApplicationProcessing|CustomerIdentification|CreditScoring|CreditApproval|CollateralValuation|Disbursement
+P13,FX_COMPL_ALIAS,Tuân thủ FX (cùng luồng với P06),Giao dịch & tuân thủ,ForeignExchange|TransactionMonitoring|AMLScreening|Reconciliation
+P14,ONB_FULL_COPY,Onboarding đầy đủ (trùng P01),Onboarding,CustomerIdentification|RiskProfileAssessment|AccountOpening|CardIssuance
+P15,LC_SHORT,LC rút gọn → giải ngân,Thương mại,LetterOfCreditIssuance|Disbursement
+P16,CASH_DEEP,Giao dịch tiền mặt + AML sâu + đối soát + kiểm toán,Tuân thủ,CashDepositWithdrawal|AMLScreening|TransactionMonitoring|Reconciliation|InternalAudit
+P17,LEND_RESCORE,Cho vay với chấm điểm hai lần,Tín dụng,LoanApplicationProcessing|CustomerIdentification|CreditScoring|CreditScoring|CreditApproval|Disbursement
+P18,XFER_FX,Chuyển tiền → FX → đối soát,Giao dịch,FundTransfer|ForeignExchange|Reconciliation
+P19,LC_MON,LC + giám sát + AML + giải ngân,Thương mại,LetterOfCreditIssuance|TransactionMonitoring|AMLScreening|Disbursement
+P20,ACC_PAY,Mở TK → chuyển tiền → quyết toán,Onboarding & giao dịch,AccountOpening|FundTransfer|PaymentSettlement

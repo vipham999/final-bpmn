@@ -5,3 +5,5 @@ networkx
 scikit-learn
 numpy
 karateclub
+plotly
+pyvis
