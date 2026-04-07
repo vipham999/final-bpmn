@@ -625,10 +625,6 @@ def cluster_story_markdown(
     return "\n".join(lines)
 
 
-def demo_csv_path() -> Path:
-    return Path(__file__).resolve().parent / "data" / "event_log_demo.csv"
-
-
 def bank20_csv_path() -> Path:
     """Event log: 20 quy trình ngân hàng (mỗi quy trình 2 case), cột process_id."""
     return Path(__file__).resolve().parent / "data" / "event_log_bank20.csv"

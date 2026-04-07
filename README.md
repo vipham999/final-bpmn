@@ -29,7 +29,7 @@ Moi trace duoc gan **ma + ten bien the** theo mau **Loan Origination** (vi du BT
 
 ## 4) Du lieu demo
 
-File mau: `data/event_log_demo.csv`
+File mau: `data/event_log_bank20.csv`
 
 - Cot bat buoc: `case_id`, `activity`, `timestamp`
 - Khoang **36 case**, **~186 dong** su kien (activity bang tieng Anh ngan gon cho slide/bao cao):
@@ -55,7 +55,7 @@ Giao dien hien: bang Case → Cluster, bieu do so case/cum, Silhouette (neu tinh
 - Ket qua phan cum phan anh **mien giong nhau ve cau truc trace**, khong tu dong la **cung nghiep vu**.
 - Graph2Vec can `karateclub`; neu loi cai dat, he thong van chay nho embedding fallback.
 
-## 7) Mau BPMN vs Petri net (LO chuan)
+## 7) Mau BPMN vs Petri net (Bank20)
 
 **Tren web (Streamlit):** chay app → tab **« Sơ đồ BPMN & Petri net »** — xem hai hinh truc tiep trong trinh duyet.
 
@@ -63,5 +63,5 @@ Giao dien hien: bang Case → Cluster, bieu do so case/cum, Silhouette (neu tinh
 
 Hai file SVG (chen Word/LaTeX hoac mo rieng):
 
-- `docs/diagrams/bpmn_lo_standard.svg` — BPMN 2.0: Start → 5 task → End (happy path giong trace chuan trong CSV).
-- `docs/diagrams/petrinet_lo_standard.svg` — Petri net dang **workflow net**: place–transition–place … (token o p0).
+- `docs/diagrams/bpmn_bank20_overview.svg` — BPMN 2.0 overview cho bo du lieu Bank20 (minh hoa luong P01 + thong tin tong quan).
+- `docs/diagrams/petrinet_bank20_template.svg` — Petri net template cho Bank20 (vi du luong P03 theo workflow net).

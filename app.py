@@ -11,8 +11,8 @@ import streamlit.components.v1 as components
 
 SO_HO_SO_LABEL = "Số hồ sơ"
 _ROOT = Path(__file__).resolve().parent
-_DIAGRAM_BPMN = _ROOT / "docs" / "diagrams" / "bpmn_lo_standard.svg"
-_DIAGRAM_PN = _ROOT / "docs" / "diagrams" / "petrinet_lo_standard.svg"
+_DIAGRAM_BPMN = _ROOT / "docs" / "diagrams" / "bpmn_bank20_overview.svg"
+_DIAGRAM_PN = _ROOT / "docs" / "diagrams" / "petrinet_bank20_template.svg"
 
 
 def _render_linear_bpmn_svg(activity_sequence: list[str], title: str) -> str:
@@ -135,7 +135,7 @@ def render_diagrams_web_tab() -> None:
 
     st.info(
         "Bạn có thể xem BPMN động theo từng process ở phía trên; hai file tĩnh gốc vẫn nằm ở "
-        "`docs/diagrams/bpmn_lo_standard.svg`, `docs/diagrams/petrinet_lo_standard.svg`."
+        "`docs/diagrams/bpmn_bank20_overview.svg`, `docs/diagrams/petrinet_bank20_template.svg`."
     )
 
 
