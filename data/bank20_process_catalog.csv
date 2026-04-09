@@ -10,7 +10,7 @@ P08,DEBT,Thu nợ + KYC + AML + kiểm toán,Tín dụng,DebtCollection|Customer
 P09,AUDIT_TRAIL,Giám sát giao dịch → đối soát → kiểm toán nội bộ,Tuân thủ,TransactionMonitoring|Reconciliation|InternalAudit
 P10,PAY_SETTLE,Chuyển tiền → quyết toán → thông báo KH,Giao dịch,FundTransfer|PaymentSettlement|CustomerNotification
 P11,LEND_NOTIFY,Cho vay (không TSĐB) + thông báo sau giải ngân,Tín dụng,LoanApplicationProcessing|CustomerIdentification|CreditScoring|CreditApproval|Disbursement|CustomerNotification
-P12,LEND_COLL_DUP,Cho vay có TSĐB (bản trùng quy trình P03 — ví dụ tài liệu song song),Tín dụng,LoanApplicationProcessing|CustomerIdentification|CreditScoring|CreditApproval|CollateralValuation|Disbursement
+P12,RISK_COLL_REVIEW,Thẩm định rủi ro hồ sơ có TSĐB (dùng chung luồng thao tác với P03),Quản trị rủi ro,LoanApplicationProcessing|CustomerIdentification|CreditScoring|CreditApproval|CollateralValuation|Disbursement
 P13,FX_COMPL_ALIAS,Tuân thủ FX (cùng luồng với P06),Giao dịch & tuân thủ,ForeignExchange|TransactionMonitoring|AMLScreening|Reconciliation
 P14,ONB_FULL_COPY,Onboarding đầy đủ (trùng P01),Onboarding,CustomerIdentification|RiskProfileAssessment|AccountOpening|CardIssuance
 P15,LC_SHORT,LC rút gọn → giải ngân,Thương mại,LetterOfCreditIssuance|Disbursement

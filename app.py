@@ -13,6 +13,7 @@ SO_HO_SO_LABEL = "Số hồ sơ"
 _ROOT = Path(__file__).resolve().parent
 _DIAGRAM_BPMN = _ROOT / "docs" / "diagrams" / "bpmn_bank20_overview.svg"
 _DIAGRAM_PN = _ROOT / "docs" / "diagrams" / "petrinet_bank20_template.svg"
+_BANK20_CSV = _ROOT / "data" / "event_log_bank20.csv"
 
 
 def _render_linear_bpmn_svg(activity_sequence: list[str], title: str) -> str:
@@ -178,7 +179,6 @@ from event_log_pipeline import (
     cluster_story_markdown,
     cluster_variant_summary_table,
     dataframe_from_pipeline,
-    bank20_csv_path,
     bank_process_catalog_path,
     embedding_artifact_paths,
     graph_embeddings_csv_bytes,
@@ -335,7 +335,7 @@ def render_event_log_thesis_tab() -> None:
                     return
                 df = load_event_log_csv(io.BytesIO(uploaded.read()))
             else:
-                df = load_event_log_csv(bank20_csv_path())
+                df = load_event_log_csv(_BANK20_CSV)
 
             st.write("**Xem trước log** (10 dòng đầu)")
             st.dataframe(df.head(10), use_container_width=True, hide_index=True)

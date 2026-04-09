@@ -93,12 +93,12 @@ PROCESSES: list[dict[str, str]] = [
         "group_vn": "Tín dụng",
         "activity_sequence": "LoanApplicationProcessing|CustomerIdentification|CreditScoring|CreditApproval|Disbursement|CustomerNotification",
     },
-    # Trùng luồng với P03 (cùng nghiệp vụ “vay có TSĐB” — hai mã quy trình song song)
+    # Trùng luồng với P03 nhưng gán mục đích nghiệp vụ khác (để minh họa rủi ro diễn giải).
     {
         "process_id": "P12",
-        "process_code": "LEND_COLL_DUP",
-        "name_vn": "Cho vay có TSĐB (bản trùng quy trình P03 — ví dụ tài liệu song song)",
-        "group_vn": "Tín dụng",
+        "process_code": "RISK_COLL_REVIEW",
+        "name_vn": "Thẩm định rủi ro hồ sơ có TSĐB (dùng chung luồng thao tác với P03)",
+        "group_vn": "Quản trị rủi ro",
         "activity_sequence": "LoanApplicationProcessing|CustomerIdentification|CreditScoring|CreditApproval|CollateralValuation|Disbursement",
     },
     # Trùng luồng với P06

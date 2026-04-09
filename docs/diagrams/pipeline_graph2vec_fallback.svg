@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 520" width="1400" height="520">
+  <title>Pipeline Event Log - Graph2Vec with Fallback - KMeans - Dashboard</title>
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#1f2937"/>
+    </marker>
+  </defs>
+
+  <rect width="100%" height="100%" fill="#f8fafc"/>
+  <text x="700" y="34" text-anchor="middle" font-family="Arial, sans-serif" font-size="19" font-weight="700" fill="#0f172a">
+    Event log -> Graph per case -> Graph2Vec (or fallback) -> K-Means -> Dashboard
+  </text>
+  <text x="700" y="56" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#475569">
+    Minh hoa luong production cho bai toan phat hien bien the quy trinh
+  </text>
+
+  <!-- Step 1 -->
+  <rect x="38" y="210" width="220" height="82" rx="10" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="148" y="242" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#111827">1) Event log</text>
+  <text x="148" y="262" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#334155">case_id, activity, timestamp</text>
+
+  <!-- Step 2 -->
+  <rect x="316" y="210" width="230" height="82" rx="10" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="431" y="242" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#111827">2) Graph per case</text>
+  <text x="431" y="262" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#334155">Direct succession graph</text>
+
+  <!-- Step 3 main -->
+  <rect x="604" y="132" width="292" height="82" rx="10" fill="#ecfeff" stroke="#0891b2" stroke-width="1.8"/>
+  <text x="750" y="164" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#0f172a">3a) Graph2Vec (karateclub)</text>
+  <text x="750" y="184" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#0f766e">Graph-level embedding (n_case x d)</text>
+
+  <!-- Step 3 fallback -->
+  <rect x="604" y="306" width="292" height="82" rx="10" fill="#fff7ed" stroke="#c2410c" stroke-width="1.8"/>
+  <text x="750" y="338" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#7c2d12">3b) Fallback embedding</text>
+  <text x="750" y="358" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#9a3412">Structural features when env fails</text>
+
+  <!-- Step 4 -->
+  <rect x="954" y="210" width="184" height="82" rx="10" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="1046" y="242" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#111827">4) K-Means</text>
+  <text x="1046" y="262" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#334155">Cluster variant labels</text>
+
+  <!-- Step 5 -->
+  <rect x="1192" y="210" width="172" height="82" rx="10" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="1278" y="242" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#111827">5) Dashboard</text>
+  <text x="1278" y="262" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#334155">Visual + duplicate search</text>
+
+  <!-- Arrows main chain -->
+  <line x1="258" y1="251" x2="316" y2="251" stroke="#1f2937" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="546" y1="251" x2="604" y2="173" stroke="#0f766e" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="896" y1="173" x2="954" y2="251" stroke="#0f766e" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="1138" y1="251" x2="1192" y2="251" stroke="#1f2937" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- Fallback branch arrows -->
+  <line x1="546" y1="251" x2="604" y2="347" stroke="#c2410c" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="896" y1="347" x2="954" y2="251" stroke="#c2410c" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- Branch labels -->
+  <text x="570" y="194" font-family="Arial, sans-serif" font-size="11" fill="#0f766e">normal path</text>
+  <text x="570" y="325" font-family="Arial, sans-serif" font-size="11" fill="#c2410c">fallback path</text>
+
+  <!-- Legend -->
+  <rect x="38" y="430" width="1326" height="58" rx="8" fill="#ffffff" stroke="#e2e8f0"/>
+  <circle cx="68" cy="458" r="6" fill="#0f766e"/>
+  <text x="82" y="462" font-family="Arial, sans-serif" font-size="11" fill="#334155">Graph2Vec run thanh cong</text>
+  <circle cx="286" cy="458" r="6" fill="#c2410c"/>
+  <text x="300" y="462" font-family="Arial, sans-serif" font-size="11" fill="#334155">Moi truong loi / thieu dependency -> fallback</text>
+  <circle cx="638" cy="458" r="6" fill="#334155"/>
+  <text x="652" y="462" font-family="Arial, sans-serif" font-size="11" fill="#334155">Dau ra cuoi: nhan cum + bang/plot phan tich</text>
+</svg>
